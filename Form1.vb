@@ -66,6 +66,8 @@ Public Class Form1
     Private spinDelays As New List(Of Integer)
     Private spinPos As Integer = 0
     Private spinTimer As Timer
+    Private jackpotGlowActive As Boolean = False
+    Private jackpotGlowTimer As Timer
     Private highlightIndex As Integer = -1
     Private animalCenters(VongQuayRongGame.ANIMAL_COUNT - 1) As PointF
     Private boardRect As Rectangle
@@ -88,6 +90,8 @@ Public Class Form1
     Private boardPanel As Panel
     Private lblRoundInfo As Label
     Private lblCountdown As Label
+    Private lblJackpot As Label
+    Private lastSpinWasJackpotHit As Boolean = False
     Private nudBet As NumericUpDown
     Private btnLockBet As Button
     Private btnHostAction As Button
@@ -283,6 +287,7 @@ Public Class Form1
         hub.SendToClient(seatIndex, "VQR_WELCOME:" & seatIndex.ToString())
         BroadcastNames()
         BroadcastScores()
+        hub.SendToClient(seatIndex, "VQR_JACKPOT:" & game.JackpotPool.ToString())
         SyncStateToLateJoiner(seatIndex)
         RefreshPlayerCards()
         AppendChat("[He thong] Player " & (seatIndex + 1).ToString() & " da vao phong.")
@@ -397,6 +402,29 @@ Public Class Form1
             Case "VQR_BET_NACK"
                 UnlockLocalBetUI()
 
+            Case "VQR_JACKPOT"
+                Dim jp As Long
+                If Long.TryParse(payload, NumberStyles.Integer, CultureInfo.InvariantCulture, jp) Then
+                    game.JackpotPool = jp
+                    UpdateJackpotLabel()
+                End If
+
+            Case "VQR_JACKPOT_HIT"
+                ' payload: soDiemTrao|seat1,seat2,...  (danh sach seat thang van do, cach nhau dau phay)
+                Dim hp As String() = payload.Split("|"c)
+                Dim wonAmountTotal As Long = Long.Parse(hp(0), CultureInfo.InvariantCulture)
+                Dim seatsWon As String = If(hp.Length > 1, hp(1), "")
+                Dim winSeats As New List(Of Integer)
+                If seatsWon.Trim() <> "" Then
+                    Dim sp2 As String() = seatsWon.Split(","c)
+                    Dim st As String
+                    For Each st In sp2
+                        Dim sIdx As Integer
+                        If Integer.TryParse(st, sIdx) Then winSeats.Add(sIdx)
+                    Next st
+                End If
+                AnnounceJackpotHit(wonAmountTotal, winSeats)
+
             Case "VQR_SPIN"
                 Dim resultIndex As Integer = Integer.Parse(payload, CultureInfo.InvariantCulture)
                 StartSpinAnimation(resultIndex)
@@ -423,6 +451,21 @@ Public Class Form1
         Dim s As String = scoresBySeat(0).ToString() & "|" & scoresBySeat(1).ToString() & "|" &
                            scoresBySeat(2).ToString() & "|" & scoresBySeat(3).ToString()
         hub.Broadcast("VQR_SCORES:" & s)
+    End Sub
+
+    ''' <summary>Cap nhat nhan hien thi so diem dang dong trong Hu (Jackpot) tren man hinh nay.</summary>
+    Private Sub UpdateJackpotLabel()
+        If lblJackpot IsNot Nothing Then
+            lblJackpot.Text = "* HU: " & game.JackpotPool.ToString() & " diem *"
+        End If
+    End Sub
+
+    ''' <summary>Chi Host goi: bao cho tat ca client biet gia tri Hu hien tai (sau khi co cuoc moi
+    ''' hoac sau khi Hu vua duoc trao thuong / reset).</summary>
+    Private Sub BroadcastJackpot()
+        If Not isHost Then Return
+        hub.Broadcast("VQR_JACKPOT:" & game.JackpotPool.ToString())
+        UpdateJackpotLabel()
     End Sub
 
     ' ============================================================
@@ -492,6 +535,43 @@ Public Class Form1
         End If
     End Sub
 
+    ''' <summary>Bat hieu ung vong sang vang quanh con Rong o giua trong ~3 giay, dung chung cho
+    ''' ca Host (tu goi truc tiep) va Client (goi khi nhan VQR_JACKPOT_HIT).</summary>
+    Private Sub TriggerJackpotGlow()
+        jackpotGlowActive = True
+        boardPanel.Invalidate()
+        If jackpotGlowTimer Is Nothing Then
+            jackpotGlowTimer = New Timer()
+            jackpotGlowTimer.Interval = 3000
+            AddHandler jackpotGlowTimer.Tick, AddressOf JackpotGlowTimer_Tick
+        End If
+        jackpotGlowTimer.Stop()
+        jackpotGlowTimer.Start()
+    End Sub
+
+    Private Sub JackpotGlowTimer_Tick(sender As Object, e As EventArgs)
+        jackpotGlowTimer.Stop()
+        jackpotGlowActive = False
+        boardPanel.Invalidate()
+    End Sub
+
+    ''' <summary>Hien thi chat + hieu ung khi kim quay trung Rong. Dung chung cho Host (goi truc
+    ''' tiep sau khi tinh xong) va Client (goi tu case VQR_JACKPOT_HIT).</summary>
+    Private Sub AnnounceJackpotHit(wonAmountTotal As Long, winningSeats As List(Of Integer))
+        TriggerJackpotGlow()
+        If winningSeats IsNot Nothing AndAlso winningSeats.Count > 0 Then
+            Dim tagList As New List(Of String)
+            Dim s As Integer
+            For Each s In winningSeats
+                tagList.Add("Player " & (s + 1).ToString())
+            Next s
+            AppendChat("[NO HU!] Kim quay trung Rong! " & String.Join(", ", tagList) &
+                       " chia nhau " & wonAmountTotal.ToString() & " diem tu Hu!")
+        Else
+            AppendChat("[NO HU!] Kim quay trung Rong nhung chua ai thang van nay - Hu duoc giu lai cho van sau!")
+        End If
+    End Sub
+
     ''' <summary>Chi Host goi: chot van dat cuoc, quay va broadcast ket qua.</summary>
     Private Sub DoSpinNow()
         If Not isHost Then Return
@@ -501,12 +581,38 @@ Public Class Form1
         btnHostAction.Enabled = False
         btnLockBet.Enabled = False
 
-        Dim resultIndex As Integer = game.SpinResult()
+        Dim jackpotHit As Boolean = False
+        Dim resultIndex As Integer = game.SpinResultWithJackpot(jackpotHit)
         lastResultIndex = resultIndex
         hub.Broadcast("VQR_SPIN:" & resultIndex.ToString())
         StartSpinAnimation(resultIndex) ' Host tu quay hinh anh cua minh luon
 
         Dim outcomes As List(Of VongQuayRongGame.RoundOutcome) = game.ComputePayouts(resultIndex, scoresBySeat)
+
+        ' Neu kim quay trung Rong (jackpotHit): chia deu tien Hu cho nhung nguoi THANG van nay.
+        ' Cong truc tiep vao Payout/NewScore cua ho truoc khi gui di, de diem hien thi da bao gom
+        ' luon phan thuong Hu (khong can them buoc dong bo rieng).
+        Dim jackpotWinners As New List(Of Integer)
+        Dim jackpotAwarded As Long = 0
+        If jackpotHit Then
+            Dim winCount As Integer = 0
+            For Each o As VongQuayRongGame.RoundOutcome In outcomes
+                If o.Won Then winCount += 1
+            Next o
+            If winCount > 0 Then
+                jackpotAwarded = game.TakeJackpot()
+                Dim share As Long = jackpotAwarded \ CLng(winCount)
+                For Each o As VongQuayRongGame.RoundOutcome In outcomes
+                    If o.Won Then
+                        o.Payout += share
+                        o.NewScore += share
+                        scoresBySeat(o.Seat) = o.NewScore
+                        jackpotWinners.Add(o.Seat)
+                    End If
+                Next o
+            End If
+        End If
+
         Dim sb As New StringBuilder()
         sb.Append(resultIndex.ToString()).Append(":")
         Dim first As Boolean = True
@@ -518,6 +624,13 @@ Public Class Form1
             sb.Append(o.Payout.ToString()).Append(",").Append(o.NewScore.ToString())
         Next o
         hub.Broadcast("VQR_RESULT:" & sb.ToString())
+
+        If jackpotHit Then
+            Dim seatsStr As String = String.Join(",", jackpotWinners.ConvertAll(Function(x) x.ToString()))
+            hub.Broadcast("VQR_JACKPOT_HIT:" & jackpotAwarded.ToString() & "|" & seatsStr)
+            BroadcastJackpot() ' gia tri moi (0 neu vua trao, hoac giu nguyen neu chua ai thang)
+            AnnounceJackpotHit(jackpotAwarded, jackpotWinners)
+        End If
 
         ' Host cung tu "nhan" ket qua cua chinh minh giong nhu Client, de bi giu lai
         ' cho toi khi vong quay tren man hinh Host dung han (xem QueueOrApplyResult).
@@ -546,7 +659,9 @@ Public Class Form1
         End If
         lockedAnimalBySeat(seat) = animalIndex
         lockedAmountBySeat(seat) = amount
+        game.AddJackpotContribution(amount)
         hub.Broadcast("VQR_LOCK:" & seat.ToString() & "|" & animalIndex.ToString() & "|" & amount.ToString())
+        BroadcastJackpot()
         RefreshPlayerCards()
     End Sub
 
@@ -739,8 +854,18 @@ Public Class Form1
         pnlGame.Dock = DockStyle.Fill
         pnlGame.BackColor = Color.FromArgb(20, 24, 30)
 
+        lblJackpot = New Label()
+        lblJackpot.Location = New Point(20, 4)
+        lblJackpot.Size = New Size(BOARD_W, 26)
+        lblJackpot.TextAlign = ContentAlignment.MiddleCenter
+        lblJackpot.BackColor = Color.FromArgb(90, 60, 10)
+        lblJackpot.ForeColor = Color.FromArgb(255, 215, 90)
+        lblJackpot.Font = New Font("Segoe UI", 11.0!, FontStyle.Bold)
+        lblJackpot.Text = "* HU: 0 diem *"
+        pnlGame.Controls.Add(lblJackpot)
+
         boardPanel = New Panel()
-        boardPanel.Location = New Point(20, 20)
+        boardPanel.Location = New Point(20, 50)
         boardPanel.Size = New Size(BOARD_W, BOARD_H)
         boardPanel.BackColor = Color.FromArgb(10, 40, 30)
         boardPanel.BorderStyle = BorderStyle.FixedSingle
@@ -750,14 +875,14 @@ Public Class Form1
         RecomputeAnimalCenters()
 
         lblRoundInfo = New Label()
-        lblRoundInfo.Location = New Point(20, BOARD_H + 30) : lblRoundInfo.AutoSize = True
+        lblRoundInfo.Location = New Point(20, BOARD_H + 60) : lblRoundInfo.AutoSize = True
         lblRoundInfo.ForeColor = Color.White
         lblRoundInfo.Font = New Font("Segoe UI", 10.0!, FontStyle.Bold)
         lblRoundInfo.Text = "Cho Host bat dau van moi..."
         pnlGame.Controls.Add(lblRoundInfo)
 
         lblCountdown = New Label()
-        lblCountdown.Location = New Point(20, BOARD_H + 55) : lblCountdown.AutoSize = True
+        lblCountdown.Location = New Point(20, BOARD_H + 85) : lblCountdown.AutoSize = True
         lblCountdown.ForeColor = Color.Gold
         lblCountdown.Font = New Font("Segoe UI", 10.0!)
         pnlGame.Controls.Add(lblCountdown)
@@ -767,11 +892,11 @@ Public Class Form1
         lblBetCap.AutoSize = True
         lblBetCap.ForeColor = Color.White
         lblBetCap.Font = New Font("Segoe UI", 9.5!, FontStyle.Bold)
-        lblBetCap.Location = New Point(20, BOARD_H + 92)
+        lblBetCap.Location = New Point(20, BOARD_H + 122)
         pnlGame.Controls.Add(lblBetCap)
 
         nudBet = New NumericUpDown()
-        nudBet.Location = New Point(175, BOARD_H + 86)
+        nudBet.Location = New Point(175, BOARD_H + 116)
         nudBet.Size = New Size(80, 26)
         nudBet.Font = New Font("Segoe UI", 10.0!, FontStyle.Bold)
         nudBet.BackColor = Color.White
@@ -787,7 +912,7 @@ Public Class Form1
 
         btnLockBet = New Button()
         btnLockBet.Text = "Khoa cuoc"
-        btnLockBet.Location = New Point(270, BOARD_H + 84) : btnLockBet.Size = New Size(120, 30)
+        btnLockBet.Location = New Point(270, BOARD_H + 114) : btnLockBet.Size = New Size(120, 30)
         btnLockBet.Font = New Font("Segoe UI", 9.5!, FontStyle.Bold)
         btnLockBet.FlatStyle = FlatStyle.Flat
         btnLockBet.FlatAppearance.BorderSize = 0
@@ -799,7 +924,7 @@ Public Class Form1
 
         btnHostAction = New Button()
         btnHostAction.Text = "Bat dau van moi"
-        btnHostAction.Location = New Point(405, BOARD_H + 84) : btnHostAction.Size = New Size(160, 30)
+        btnHostAction.Location = New Point(405, BOARD_H + 114) : btnHostAction.Size = New Size(160, 30)
         btnHostAction.Font = New Font("Segoe UI", 9.5!, FontStyle.Bold)
         btnHostAction.FlatStyle = FlatStyle.Flat
         btnHostAction.FlatAppearance.BorderSize = 0
@@ -812,11 +937,11 @@ Public Class Form1
         Dim sideX As Integer = BOARD_W + 40
         Dim p As Integer
         For p = 0 To 3
-            pnlPlayers(p) = BuildPlayerCard(p, New Point(sideX, 20 + p * 80), 300)
+            pnlPlayers(p) = BuildPlayerCard(p, New Point(sideX, 50 + p * 80), 300)
             pnlGame.Controls.Add(pnlPlayers(p))
         Next p
 
-        BuildChatPanel(sideX, 300, 20 + 4 * 80 + 10, 700 - (20 + 4 * 80 + 10) - 20)
+        BuildChatPanel(sideX, 300, 50 + 4 * 80 + 10, 700 - (50 + 4 * 80 + 10) - 20)
 
         Me.Controls.Add(pnlGame)
         RefreshPlayerCards()
@@ -963,6 +1088,16 @@ Public Class Form1
 
         ' "Dau rong" o giua - dung sprite neu co, khong thi fallback ve tay
         Dim dr As Single = 30
+        If jackpotGlowActive Then
+            Using glowPen As New Pen(Color.FromArgb(255, 230, 60), 4)
+                g.DrawEllipse(glowPen, centerPt.X - dr - 10, centerPt.Y - dr - 10, (dr + 10) * 2, (dr + 10) * 2)
+            End Using
+            Using glowPen2 As New Pen(Color.FromArgb(120, 255, 230, 60), 8)
+                g.DrawEllipse(glowPen2, centerPt.X - dr - 16, centerPt.Y - dr - 16, (dr + 16) * 2, (dr + 16) * 2)
+            End Using
+            DrawCenteredString(g, "NO HU!", New PointF(centerPt.X, centerPt.Y - dr - 30),
+                                New Font("Segoe UI", 11.0!, FontStyle.Bold), Color.FromArgb(255, 230, 60))
+        End If
         If dragonImage IsNot Nothing Then
             DrawSpriteCircular(g, dragonImage, centerPt, dr, Color.FromArgb(255, 220, 130), 2)
         Else

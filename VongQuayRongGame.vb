@@ -25,6 +25,17 @@ Public Class VongQuayRongGame
     Public Const MIN_BET As Long = 50
     Public Const MAX_BET As Long = 200
 
+    ''' <summary>Ty le % moi luot cuoc duoc trich vao hu (Jackpot). VD 0.05 = 5%.</summary>
+    Public Const JACKPOT_RATE As Double = 0.05
+
+    ''' <summary>Trong so (weight) cua con Rong o giua trong vong quay ngau nhien - cang thap
+    ''' thi cang hiem khi "no hu". Trong so cac con vat thuong dao dong 10..18 (xem BuildAnimals).</summary>
+    Public Const DRAGON_WEIGHT As Integer = 6
+
+    ''' <summary>So diem hien dang dong trong hu, cong don tu JACKPOT_RATE moi luot cuoc.
+    ''' Chi Host duoc phep thay doi truc tiep, Client chi nhan gia tri qua VQR_JACKPOT.</summary>
+    Public JackpotPool As Long = 0
+
     ''' <summary>Thong tin 1 con vat tren vong quay.</summary>
     Public Class AnimalInfo
         Public ReadOnly Name As String
@@ -112,6 +123,49 @@ Public Class VongQuayRongGame
 
     Public Function HasBet(seat As Integer) As Boolean
         Return CurrentBets.ContainsKey(seat)
+    End Function
+
+    ''' <summary>Trich JACKPOT_RATE cua 1 luot cuoc vao hu. Goi ngay khi 1 cuoc duoc chap nhan.
+    ''' Khong tru diem nguoi choi - phan trich nay la "nha cai" gop rieng, khong anh huong
+    ''' den tien thuong/thua binh thuong cua nguoi choi.</summary>
+    Public Sub AddJackpotContribution(betAmount As Long)
+        Dim contrib As Long = CLng(Math.Floor(betAmount * JACKPOT_RATE))
+        If contrib < 1 Then contrib = 1
+        JackpotPool += contrib
+    End Sub
+
+    ''' <summary>Rut toan bo hu hien tai va reset ve 0 (dung khi trao thuong nong hu).</summary>
+    Public Function TakeJackpot() As Long
+        Dim amt As Long = JackpotPool
+        JackpotPool = 0
+        Return amt
+    End Function
+
+    ''' <summary>Quay co kiem tra "no hu": quay 1 lan tren tong trong so 12 con vat + con Rong o giua.
+    ''' Neu kim roi vao vung Rong (hiem), jackpotHit = True va ham se quay LAI 1 lan nua CHI trong
+    ''' 12 con vat (goi SpinResult binh thuong) de xac dinh con vat thang/thua nhu le, dam bao logic
+    ''' tinh diem (ComputePayouts) khong doi. Vong quay tren UI se hien hieu ung dac biet khi trung Rong.</summary>
+    Public Function SpinResultWithJackpot(ByRef jackpotHit As Boolean) As Integer
+        Dim totalWeight As Integer = 0
+        Dim i As Integer
+        For i = 0 To ANIMAL_COUNT - 1
+            totalWeight += Animals(i).WeightRandom
+        Next i
+        totalWeight += DRAGON_WEIGHT
+
+        Dim roll As Integer = rngInstance.Next(0, totalWeight)
+        Dim acc As Integer = 0
+        For i = 0 To ANIMAL_COUNT - 1
+            acc += Animals(i).WeightRandom
+            If roll < acc Then
+                jackpotHit = False
+                Return i
+            End If
+        Next i
+
+        ' Roi vao vung Rong => no hu. Quay lai binh thuong trong 12 con vat de co ket qua tra thuong.
+        jackpotHit = True
+        Return SpinResult()
     End Function
 
     ''' <summary>Host quay: chon 1 index 0..11 theo trong so WeightRandom cua tung con vat.</summary>
