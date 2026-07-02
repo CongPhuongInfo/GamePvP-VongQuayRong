@@ -18,23 +18,28 @@ Public Class VongQuayRongGame
 
     Public Const ANIMAL_COUNT As Integer = 12
 
+    ''' <summary>Chi so dai dien cho o "No Hu" (Jackpot) - o thu 13 tren vong quay, ngoai 12 con vat.</summary>
+    Public Const JACKPOT_INDEX As Integer = ANIMAL_COUNT
+
+    ''' <summary>Tong so o tren vong quay: 12 con vat + 1 o No Hu.</summary>
+    Public Const TOTAL_SLOTS As Integer = ANIMAL_COUNT + 1
+
+    ''' <summary>Trong so quay cua o No Hu - rat thap so voi tung con vat, de No Hu la su kien hiem.</summary>
+    Public Const JACKPOT_WEIGHT As Integer = 6
+
+    ''' <summary>Quy Jackpot khoi tao / muc san sau khi vua "vo hu".</summary>
+    Public Const JACKPOT_SEED As Long = 500
+
+    ''' <summary>Ty le trich them (tien nha cai gop, KHONG tru diem nguoi choi) tu moi cuoc
+    ''' de nuoi quy Jackpot moi van.</summary>
+    Public Const JACKPOT_CONTRIBUTION_RATE As Double = 0.1
+
     ''' <summary>Diem khoi dau cua moi nguoi choi khi vao phong.</summary>
     Public Const STARTING_SCORE As Long = 1000
 
-    ''' <summary>Muc dat cuoc toi thieu / toi da cho moi van.</summary>
+    ''' <summary>Muc dat cuoc toi thieu / toi da cho moi van (ap dung ca cho o No Hu).</summary>
     Public Const MIN_BET As Long = 50
     Public Const MAX_BET As Long = 200
-
-    ''' <summary>Ty le % moi luot cuoc duoc trich vao hu (Jackpot). VD 0.05 = 5%.</summary>
-    Public Const JACKPOT_RATE As Double = 0.05
-
-    ''' <summary>Trong so (weight) cua con Rong o giua trong vong quay ngau nhien - cang thap
-    ''' thi cang hiem khi "no hu". Trong so cac con vat thuong dao dong 10..18 (xem BuildAnimals).</summary>
-    Public Const DRAGON_WEIGHT As Integer = 6
-
-    ''' <summary>So diem hien dang dong trong hu, cong don tu JACKPOT_RATE moi luot cuoc.
-    ''' Chi Host duoc phep thay doi truc tiep, Client chi nhan gia tri qua VQR_JACKPOT.</summary>
-    Public JackpotPool As Long = 0
 
     ''' <summary>Thong tin 1 con vat tren vong quay.</summary>
     Public Class AnimalInfo
@@ -69,6 +74,8 @@ Public Class VongQuayRongGame
         Public Won As Boolean
         Public Payout As Long      ' duong = duoc them, am = bi tru
         Public NewScore As Long
+        Public IsJackpot As Boolean = False ' True neu van nay ket qua roi vao o No Hu
+        Public JackpotShare As Long = 0     ' phan quy Jackpot nhan duoc (chi > 0 khi thang o No Hu)
     End Class
 
     Public Shared ReadOnly Animals() As AnimalInfo = BuildAnimals()
@@ -76,6 +83,10 @@ Public Class VongQuayRongGame
     ' ------- Trang thai van dau hien tai (chi Host dung de xu ly) -------
     Public CurrentRoundNo As Integer = 0
     Public CurrentBets As New Dictionary(Of Integer, BetInfo)  ' seat -> cuoc, reset moi van
+
+    ''' <summary>Quy Jackpot hien tai (chi Host theo doi). Bat dau tu JACKPOT_SEED, tang dan
+    ''' moi van dat cuoc, "vo" het khi co nguoi trung o No Hu (roi quay ve muc san).</summary>
+    Public JackpotPool As Long = JACKPOT_SEED
 
     Private rngInstance As New Random()
 
@@ -109,7 +120,7 @@ Public Class VongQuayRongGame
     ''' <summary>Ghi nhan cuoc cua 1 seat. Tra False neu du lieu khong hop le (sai con vat,
     ''' cuoc ngoai khoang MIN_BET..MAX_BET, hoac cuoc vuot qua diem hien co).</summary>
     Public Function PlaceBet(seat As Integer, animalIndex As Integer, amount As Long, currentScore As Long) As Boolean
-        If animalIndex < 0 OrElse animalIndex >= ANIMAL_COUNT Then Return False
+        If animalIndex < 0 OrElse animalIndex >= TOTAL_SLOTS Then Return False
         If amount < MIN_BET OrElse amount > MAX_BET Then Return False
         If amount > currentScore Then Return False
         Dim b As New BetInfo()
@@ -125,68 +136,57 @@ Public Class VongQuayRongGame
         Return CurrentBets.ContainsKey(seat)
     End Function
 
-    ''' <summary>Trich JACKPOT_RATE cua 1 luot cuoc vao hu. Goi ngay khi 1 cuoc duoc chap nhan.
-    ''' Khong tru diem nguoi choi - phan trich nay la "nha cai" gop rieng, khong anh huong
-    ''' den tien thuong/thua binh thuong cua nguoi choi.</summary>
-    Public Sub AddJackpotContribution(betAmount As Long)
-        Dim contrib As Long = CLng(Math.Floor(betAmount * JACKPOT_RATE))
-        If contrib < 1 Then contrib = 1
-        JackpotPool += contrib
-    End Sub
-
-    ''' <summary>Rut toan bo hu hien tai va reset ve 0 (dung khi trao thuong nong hu).</summary>
-    Public Function TakeJackpot() As Long
-        Dim amt As Long = JackpotPool
-        JackpotPool = 0
-        Return amt
-    End Function
-
-    ''' <summary>Quay co kiem tra "no hu": quay 1 lan tren tong trong so 12 con vat + con Rong o giua.
-    ''' Neu kim roi vao vung Rong (hiem), jackpotHit = True va ham se quay LAI 1 lan nua CHI trong
-    ''' 12 con vat (goi SpinResult binh thuong) de xac dinh con vat thang/thua nhu le, dam bao logic
-    ''' tinh diem (ComputePayouts) khong doi. Vong quay tren UI se hien hieu ung dac biet khi trung Rong.</summary>
-    Public Function SpinResultWithJackpot(ByRef jackpotHit As Boolean) As Integer
-        Dim totalWeight As Integer = 0
-        Dim i As Integer
-        For i = 0 To ANIMAL_COUNT - 1
-            totalWeight += Animals(i).WeightRandom
-        Next i
-        totalWeight += DRAGON_WEIGHT
-
-        Dim roll As Integer = rngInstance.Next(0, totalWeight)
-        Dim acc As Integer = 0
-        For i = 0 To ANIMAL_COUNT - 1
-            acc += Animals(i).WeightRandom
-            If roll < acc Then
-                jackpotHit = False
-                Return i
-            End If
-        Next i
-
-        ' Roi vao vung Rong => no hu. Quay lai binh thuong trong 12 con vat de co ket qua tra thuong.
-        jackpotHit = True
-        Return SpinResult()
-    End Function
-
-    ''' <summary>Host quay: chon 1 index 0..11 theo trong so WeightRandom cua tung con vat.</summary>
+    ''' <summary>Host quay: chon 1 index 0..11 theo trong so WeightRandom cua tung con vat, hoac
+    ''' JACKPOT_INDEX (12) theo trong so JACKPOT_WEIGHT rat thap (o No Hu, su kien hiem).</summary>
     Public Function SpinResult() As Integer
         Dim totalWeight As Integer = 0
         Dim i As Integer
         For i = 0 To ANIMAL_COUNT - 1
             totalWeight += Animals(i).WeightRandom
         Next i
+        totalWeight += JACKPOT_WEIGHT
+
         Dim roll As Integer = rngInstance.Next(0, totalWeight)
         Dim acc As Integer = 0
         For i = 0 To ANIMAL_COUNT - 1
             acc += Animals(i).WeightRandom
             If roll < acc Then Return i
         Next i
-        Return ANIMAL_COUNT - 1
+        ' Phan trong so con lai (JACKPOT_WEIGHT) ung voi o No Hu
+        Return JACKPOT_INDEX
     End Function
 
     ''' <summary>Tinh thuong/thua cho tat ca seat da dat cuoc trong van, dua vao ket qua quay.
-    ''' scoresBySeat la diem HIEN TAI cua tung seat (se duoc cong don va cap nhat trong outcome).</summary>
+    ''' scoresBySeat la diem HIEN TAI cua tung seat (se duoc cong don va cap nhat trong outcome).
+    ''' Neu resultIndex = JACKPOT_INDEX (o No Hu): nhung ai dat cuoc vao o No Hu se chia deu
+    ''' nhau quy JackpotPool hien co (roi quy tro ve muc JACKPOT_SEED); ai dat cuoc con vat
+    ''' khac van mat cuoc binh thuong vi khong trung. Moi van (bat ke ket qua ra sao), 1 phan
+    ''' nho (JACKPOT_CONTRIBUTION_RATE) cua tung cuoc duoc gop them vao quy Jackpot cho van sau -
+    ''' day la tien "nha cai" bu them, KHONG tru vao diem cua nguoi choi.</summary>
     Public Function ComputePayouts(resultIndex As Integer, scoresBySeat As Dictionary(Of Integer, Long)) As List(Of RoundOutcome)
+        ' Gop quy Jackpot tu tat ca cuoc van nay (khong anh huong diem nguoi choi)
+        For Each kvSeed As KeyValuePair(Of Integer, BetInfo) In CurrentBets
+            Dim contrib As Long = CLng(Math.Floor(CDbl(kvSeed.Value.Amount) * JACKPOT_CONTRIBUTION_RATE))
+            If contrib > 0 Then JackpotPool += contrib
+        Next kvSeed
+
+        Dim isJackpotRound As Boolean = (resultIndex = JACKPOT_INDEX)
+
+        ' Neu la van No Hu: tim nhung ai dat cuoc dung o No Hu de chia quy
+        Dim jackpotWinnerSeats As New List(Of Integer)
+        If isJackpotRound Then
+            For Each kvFind As KeyValuePair(Of Integer, BetInfo) In CurrentBets
+                If kvFind.Value.AnimalIndex = JACKPOT_INDEX Then jackpotWinnerSeats.Add(kvFind.Key)
+            Next kvFind
+        End If
+
+        Dim sharePerWinner As Long = 0
+        Dim poolPaidOut As Long = 0
+        If jackpotWinnerSeats.Count > 0 Then
+            sharePerWinner = JackpotPool \ CLng(jackpotWinnerSeats.Count)
+            poolPaidOut = sharePerWinner * CLng(jackpotWinnerSeats.Count)
+        End If
+
         Dim results As New List(Of RoundOutcome)
         For Each kv As KeyValuePair(Of Integer, BetInfo) In CurrentBets
             Dim b As BetInfo = kv.Value
@@ -194,10 +194,16 @@ Public Class VongQuayRongGame
             outcome.Seat = b.Seat
             outcome.AnimalIndex = b.AnimalIndex
             outcome.Amount = b.Amount
+            outcome.IsJackpot = isJackpotRound
 
             If b.AnimalIndex = resultIndex Then
                 outcome.Won = True
-                outcome.Payout = b.Amount * CLng(Animals(resultIndex).Multiplier)
+                If isJackpotRound Then
+                    outcome.Payout = sharePerWinner
+                    outcome.JackpotShare = sharePerWinner
+                Else
+                    outcome.Payout = b.Amount * CLng(Animals(resultIndex).Multiplier)
+                End If
             Else
                 outcome.Won = False
                 outcome.Payout = -b.Amount
@@ -211,6 +217,13 @@ Public Class VongQuayRongGame
 
             results.Add(outcome)
         Next kv
+
+        ' Vo hu: tru quy da chia ra, roi quay ve muc san toi thieu
+        If jackpotWinnerSeats.Count > 0 Then
+            JackpotPool -= poolPaidOut
+            If JackpotPool < JACKPOT_SEED Then JackpotPool = JACKPOT_SEED
+        End If
+
         Return results
     End Function
 
