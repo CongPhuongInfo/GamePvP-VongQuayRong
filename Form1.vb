@@ -950,7 +950,7 @@ Public Class Form1
 
         If isHost Then
             Dim lblTopUpHint As New Label()
-            lblTopUpHint.Text = "Mẹo: bấm CHUỘT PHẢI vào thẻ 1 người chơi để nạp điểm cho họ (trừ vào điểm của Host)."
+            lblTopUpHint.Text = "Mẹo: bấm CHUỘT PHẢI vào thẻ 1 người chơi để nạp hoặc trừ điểm cho họ (đổi ngược với điểm của Host)."
             lblTopUpHint.AutoSize = True
             lblTopUpHint.ForeColor = Color.LightGray
             lblTopUpHint.Font = New Font("Segoe UI", 7.5!, FontStyle.Italic)
@@ -1052,13 +1052,19 @@ Public Class Form1
     End Sub
 
     ''' <summary>Gan context menu (bam chuot phai) vao 1 the nguoi choi, chi danh cho Host, de Host
-    ''' co the nap diem cho nguoi choi do bat cu luc nao. Gan ca cho cac control con ben trong the
-    ''' (title, status...) de bam chuot phai o dau trong the cung mo duoc menu.</summary>
+    ''' co the nap/tru diem cho nguoi choi do bat cu luc nao (vd: sua lai neu lo nap sai). Gan ca cho
+    ''' cac control con ben trong the (title, status...) de bam chuot phai o dau trong the cung mo duoc menu.</summary>
     Private Sub AttachTopUpMenu(card As Panel, player As Integer)
         Dim cms As New ContextMenuStrip()
-        Dim item As New ToolStripMenuItem("Nạp điểm cho người chơi này...")
-        AddHandler item.Click, Sub(s As Object, e As EventArgs) TopUpPlayerScore(player)
-        cms.Items.Add(item)
+
+        Dim itemAdd As New ToolStripMenuItem("Nạp điểm cho người chơi này...")
+        AddHandler itemAdd.Click, Sub(s As Object, e As EventArgs) AdjustPlayerScore(player, True)
+        cms.Items.Add(itemAdd)
+
+        Dim itemSub As New ToolStripMenuItem("Trừ điểm của người chơi này...")
+        AddHandler itemSub.Click, Sub(s As Object, e As EventArgs) AdjustPlayerScore(player, False)
+        cms.Items.Add(itemSub)
+
         card.ContextMenuStrip = cms
         Dim ctrl As Control
         For Each ctrl In card.Controls
@@ -1066,19 +1072,24 @@ Public Class Form1
         Next ctrl
     End Sub
 
-    ''' <summary>Chi Host goi: hoi so diem can nap, tru truc tiep tu diem cua Host va cong cho seat
-    ''' duoc chon, roi dong bo diem moi cho tat ca nguoi choi qua mang.</summary>
-    Private Sub TopUpPlayerScore(seat As Integer)
+    ''' <summary>Chi Host goi: nap them diem cho 1 nguoi choi (tru tu diem Host) hoac tru bot diem
+    ''' cua nguoi choi do (cong lai cho Host) - dung de sua lai neu lo nap/tru sai. isTopUp = True la
+    ''' nap (Host -> nguoi choi), False la tru (nguoi choi -> Host). Sau khi doi, dong bo diem moi
+    ''' cho tat ca nguoi choi qua mang.</summary>
+    Private Sub AdjustPlayerScore(seat As Integer, isTopUp As Boolean)
         If Not isHost Then Return
-        If seat = 0 Then Return ' khong nap cho chinh Host
+        If seat = 0 Then Return ' khong nap/tru cho chinh Host
 
         If Not playerConnected(seat) Then
-            MessageBox.Show("Player " & (seat + 1).ToString() & " hiện chưa có ai, không thể nạp điểm.")
+            MessageBox.Show("Player " & (seat + 1).ToString() & " hiện chưa có ai, không thể chỉnh điểm.")
             Return
         End If
 
-        Dim promptMsg As String = "Nhập số điểm muốn nạp cho Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")." & vbCrLf & "Số điểm này sẽ được TRỪ trực tiếp từ điểm của bạn (Host)."
-        Dim raw As String = InputBox(promptMsg, "Nạp điểm cho người chơi", "50")
+        Dim actionLabel As String = If(isTopUp, "nạp cho", "trừ của")
+        Dim promptMsg As String = "Nhập số điểm muốn " & actionLabel & " Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")." & vbCrLf &
+            If(isTopUp, "Số điểm này sẽ được TRỪ trực tiếp từ điểm của bạn (Host).", "Số điểm này sẽ được CỘNG trực tiếp vào điểm của bạn (Host).")
+        Dim dialogTitle As String = If(isTopUp, "Nạp điểm cho người chơi", "Trừ điểm của người chơi")
+        Dim raw As String = InputBox(promptMsg, dialogTitle, "50")
         If raw Is Nothing OrElse raw.Trim() = "" Then Return ' nguoi dung bam Cancel hoac de trong
 
         Dim amount As Long
@@ -1093,17 +1104,28 @@ Public Class Form1
 
         Dim hostScore As Long = 0
         If scoresBySeat.ContainsKey(0) Then hostScore = scoresBySeat(0)
-        If amount > hostScore Then
-            MessageBox.Show("Bạn không đủ điểm để nạp (bạn đang có " & hostScore.ToString() & " điểm).")
-            Return
+        Dim targetScore As Long = 0
+        If scoresBySeat.ContainsKey(seat) Then targetScore = scoresBySeat(seat)
+
+        Dim sysMsg As String
+        If isTopUp Then
+            If amount > hostScore Then
+                MessageBox.Show("Bạn không đủ điểm để nạp (bạn đang có " & hostScore.ToString() & " điểm).")
+                Return
+            End If
+            scoresBySeat(0) = hostScore - amount
+            scoresBySeat(seat) = targetScore + amount
+            sysMsg = "Host đã nạp " & amount.ToString() & " điểm cho Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")."
+        Else
+            If amount > targetScore Then
+                MessageBox.Show("Player " & (seat + 1).ToString() & " không đủ điểm để trừ (hiện có " & targetScore.ToString() & " điểm).")
+                Return
+            End If
+            scoresBySeat(seat) = targetScore - amount
+            scoresBySeat(0) = hostScore + amount
+            sysMsg = "Host đã trừ " & amount.ToString() & " điểm của Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")."
         End If
 
-        scoresBySeat(0) = hostScore - amount
-        Dim targetOld As Long = 0
-        If scoresBySeat.ContainsKey(seat) Then targetOld = scoresBySeat(seat)
-        scoresBySeat(seat) = targetOld + amount
-
-        Dim sysMsg As String = "Host đã nạp " & amount.ToString() & " điểm cho Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")."
         AppendChat("Hệ thống: " & sysMsg)
         hub.Broadcast("CHAT:Hệ thống:" & sysMsg)
 
