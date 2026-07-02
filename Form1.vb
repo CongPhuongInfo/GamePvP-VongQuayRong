@@ -207,39 +207,39 @@ Public Class Form1
         pnlConnect.BackColor = Color.FromArgb(245, 245, 240)
 
         Dim lblTitle As New Label()
-        lblTitle.Text = "VONG QUAY RONG"
+        lblTitle.Text = "VÒNG QUAY RỒNG"
         lblTitle.Font = New Font("Segoe UI", 18.0!, FontStyle.Bold)
         lblTitle.AutoSize = True
         lblTitle.Location = New Point(40, 30)
         pnlConnect.Controls.Add(lblTitle)
 
-        Dim lblName As New Label() : lblName.Text = "Ten cua ban:" : lblName.AutoSize = True
+        Dim lblName As New Label() : lblName.Text = "Tên của bạn:" : lblName.AutoSize = True
         lblName.Location = New Point(40, 100)
         pnlConnect.Controls.Add(lblName)
         txtName = New TextBox() : txtName.Location = New Point(40, 122) : txtName.Size = New Size(220, 24)
         txtName.Text = "Nguoi choi"
         pnlConnect.Controls.Add(txtName)
 
-        Dim lblPort As New Label() : lblPort.Text = "Cong (Port):" : lblPort.AutoSize = True
+        Dim lblPort As New Label() : lblPort.Text = "Cổng (Port):" : lblPort.AutoSize = True
         lblPort.Location = New Point(40, 160)
         pnlConnect.Controls.Add(lblPort)
         txtPort = New TextBox() : txtPort.Location = New Point(40, 182) : txtPort.Size = New Size(220, 24)
         txtPort.Text = DEFAULT_PORT.ToString()
         pnlConnect.Controls.Add(txtPort)
 
-        btnHost = New Button() : btnHost.Text = "Tao phong (Host)"
+        btnHost = New Button() : btnHost.Text = "Tạo phòng (Host)"
         btnHost.Location = New Point(40, 220) : btnHost.Size = New Size(220, 34)
         AddHandler btnHost.Click, AddressOf BtnHost_Click
         pnlConnect.Controls.Add(btnHost)
 
-        Dim lblIP As New Label() : lblIP.Text = "IP cua Host:" : lblIP.AutoSize = True
+        Dim lblIP As New Label() : lblIP.Text = "IP của Host:" : lblIP.AutoSize = True
         lblIP.Location = New Point(40, 280)
         pnlConnect.Controls.Add(lblIP)
         txtIP = New TextBox() : txtIP.Location = New Point(40, 302) : txtIP.Size = New Size(220, 24)
         txtIP.Text = "127.0.0.1"
         pnlConnect.Controls.Add(txtIP)
 
-        btnJoin = New Button() : btnJoin.Text = "Vao phong (Join)"
+        btnJoin = New Button() : btnJoin.Text = "Vào phòng (Join)"
         btnJoin.Location = New Point(40, 336) : btnJoin.Size = New Size(220, 34)
         AddHandler btnJoin.Click, AddressOf BtnJoin_Click
         pnlConnect.Controls.Add(btnJoin)
@@ -255,7 +255,7 @@ Public Class Form1
     Private Sub BtnHost_Click(sender As Object, e As EventArgs)
         Dim port As Integer
         If Not Integer.TryParse(txtPort.Text.Trim(), port) Then
-            MessageBox.Show("Port khong hop le.") : Return
+            MessageBox.Show("Port khôn hợp lệ.") : Return
         End If
         isHost = True
         localSeat = 0
@@ -268,14 +268,14 @@ Public Class Form1
         AddHandler hub.LineReceivedFromClient, AddressOf Hub_LineReceived
         hub.StartListening(port)
 
-        lblConnectStatus.Text = "Dang cho nguoi choi ket noi tren cong " & port.ToString() & " ..."
+        lblConnectStatus.Text = "Đang chờ người chơi kết nối trên cổng " & port.ToString() & " ..."
         ShowGamePanel()
     End Sub
 
     Private Sub BtnJoin_Click(sender As Object, e As EventArgs)
         Dim port As Integer
         If Not Integer.TryParse(txtPort.Text.Trim(), port) Then
-            MessageBox.Show("Port khong hop le.") : Return
+            MessageBox.Show("Port không hợp  lệ.") : Return
         End If
         isHost = False
         playerNames(0) = SafeName(txtName.Text) ' se duoc ghi de dung seat sau khi WELCOME
@@ -286,12 +286,12 @@ Public Class Form1
         AddHandler peer.LineReceived, AddressOf Peer_LineReceived
         peer.ConnectToHost(txtIP.Text.Trim(), port)
 
-        lblConnectStatus.Text = "Dang ket noi den " & txtIP.Text.Trim() & ":" & port.ToString() & " ..."
+        lblConnectStatus.Text = "Đang kết nối đến " & txtIP.Text.Trim() & ":" & port.ToString() & " ..."
     End Sub
 
     Private Function SafeName(raw As String) As String
         Dim s As String = raw.Trim()
-        If s = "" Then Return "Nguoi choi"
+        If s = "" Then Return "Người chơi"
         If s.Length > 16 Then s = s.Substring(0, 16)
         Return s
     End Function
@@ -319,6 +319,7 @@ Public Class Form1
         hub.SendToClient(seatIndex, "VQR_WELCOME:" & seatIndex.ToString())
         BroadcastNames()
         BroadcastScores()
+        BroadcastConnected()
         hub.SendToClient(seatIndex, "VQR_JACKPOT:" & game.JackpotPool.ToString())
         If spinHistory.Count > 0 Then
             hub.SendToClient(seatIndex, "VQR_HISTORY:" & String.Join(",", spinHistory))
@@ -351,10 +352,11 @@ Public Class Form1
 
     Private Sub Hub_ClientDisconnected(seatIndex As Integer)
         playerConnected(seatIndex) = False
-        playerNames(seatIndex) = "Nguoi choi " & (seatIndex + 1).ToString()
+        playerNames(seatIndex) = "Người chơi " & (seatIndex + 1).ToString()
         BroadcastNames()
+        BroadcastConnected()
         RefreshPlayerCards()
-        AppendChat("[He thong] Player " & (seatIndex + 1).ToString() & " da roi phong.")
+        AppendChat("[He thong] Player " & (seatIndex + 1).ToString() & " đã rời phòng.")
     End Sub
 
     Private Sub Hub_LineReceived(seatIndex As Integer, line As String)
@@ -383,7 +385,7 @@ Public Class Form1
             Case "VQR_WELCOME"
                 localSeat = Integer.Parse(payload, CultureInfo.InvariantCulture)
                 ShowGamePanel()
-                lblConnectStatus.Text = "Da vao phong, ban la Player " & (localSeat + 1).ToString()
+                lblConnectStatus.Text = "Đã vào phòng, bạn là Player " & (localSeat + 1).ToString()
 
             Case "VQR_HELLO"
                 If fromSeat >= 0 Then
@@ -409,6 +411,14 @@ Public Class Form1
                         scoresBySeat(i2) = v
                     End If
                 Next i2
+                RefreshPlayerCards()
+
+            Case "VQR_CONN"
+                Dim cp As String() = payload.Split("|"c)
+                Dim i3 As Integer
+                For i3 = 0 To Math.Min(3, cp.Length - 1)
+                    playerConnected(i3) = (cp(i3).Trim() = "1")
+                Next i3
                 RefreshPlayerCards()
 
             Case "VQR_ROUND"
@@ -483,6 +493,18 @@ Public Class Form1
         hub.Broadcast("VQR_SCORES:" & s)
     End Sub
 
+    ''' <summary>Chi Host goi: dong bo trang thai da-ket-noi cua tung seat sang tat ca Client.
+    ''' Neu khong co ham nay, Client se khong biet duoc seat nao (ke ca seat cua chinh minh)
+    ''' dang co nguoi, khien the nguoi choi hien "(trong)" du da vao phong.</summary>
+    Private Sub BroadcastConnected()
+        If Not isHost Then Return
+        Dim s As String = CInt(IIf(playerConnected(0), 1, 0)).ToString() & "|" &
+                           CInt(IIf(playerConnected(1), 1, 0)).ToString() & "|" &
+                           CInt(IIf(playerConnected(2), 1, 0)).ToString() & "|" &
+                           CInt(IIf(playerConnected(3), 1, 0)).ToString()
+        hub.Broadcast("VQR_CONN:" & s)
+    End Sub
+
     ' ============================================================
     '  VONG DAT CUOC (Host dieu khien state machine)
     ' ============================================================
@@ -521,7 +543,7 @@ Public Class Form1
             If lblCardResult(i) IsNot Nothing Then lblCardResult(i).Text = ""
         Next i
         secondsLeft = secs
-        lblRoundInfo.Text = "Van " & roundNo.ToString() & " - hay chon 1 con vat va khoa cuoc!"
+        lblRoundInfo.Text = "Ván " & roundNo.ToString() & " -  hãy chọn 1 con vật và khoá cược!"
         lblCountdown.Text = "Con: " & secondsLeft.ToString() & "s"
         btnLockBet.Enabled = True
         nudBet.Enabled = True
@@ -628,20 +650,20 @@ Public Class Form1
             btnLockBet.Enabled = True
             nudBet.Enabled = True
         End If
-        AppendChat("[He thong] Cuoc vua roi khong hop le, hay dat cuoc lai.")
+        AppendChat("[He thong] Cược vừa rồi không hợp lệ, hãy đặt cược lại.")
     End Sub
 
     Private Sub BtnLockBet_Click(sender As Object, e As EventArgs)
         If state <> RoundState.Betting Then Return
         If hasLockedThisRound Then Return
         If selectedAnimalIndex < 0 Then
-            MessageBox.Show("Hay bam chon 1 con vat tren vong quay truoc.")
+            MessageBox.Show("Hãy bấm chọn 1 con vật trên vòng quay trước.")
             Return
         End If
         Dim amount As Long = CLng(nudBet.Value)
         Dim mySeat As Integer = If(isHost, 0, localSeat)
         If mySeat >= 0 AndAlso amount > scoresBySeat(mySeat) Then
-            MessageBox.Show("Ban khong du diem de dat cuoc muc nay.")
+            MessageBox.Show("Bạn không đủ điểm để đặt mức này.")
             Return
         End If
         hasLockedThisRound = True
@@ -665,11 +687,11 @@ Public Class Form1
         state = RoundState.ShowingResult
         AddHistoryEntry(resultIndex)
         If resultIndex = VongQuayRongGame.JACKPOT_INDEX Then
-            lblRoundInfo.Text = "Ket qua: NO HU!!! (o dac biet)"
-            AppendChat("[He thong] VO HU!!! Vong quay dung vao o No Hu.")
+            lblRoundInfo.Text = "Kết quả: Nổ Hũ!!! (ô đặc biệt)"
+            AppendChat("[He thong] Vô hũ!!! Vòng quay đã dừng ở ô Nổ Hũ.")
             StartJackpotCelebration()
         Else
-            lblRoundInfo.Text = "Ket qua: " & VongQuayRongGame.Animals(resultIndex).Name &
+            lblRoundInfo.Text = "Kết quả: " & VongQuayRongGame.Animals(resultIndex).Name &
                                  " (x" & VongQuayRongGame.Animals(resultIndex).Multiplier.ToString() & ")"
         End If
 
@@ -699,18 +721,18 @@ Public Class Form1
                 lastRoundWonBySeat(seat) = won
                 lastRoundPayoutBySeat(seat) = payout
                 If won AndAlso animal = VongQuayRongGame.JACKPOT_INDEX Then
-                    AppendChat("[Ket qua] " & tag & " TRUNG NO HU, nhan " & payout.ToString() & " diem!")
+                    AppendChat("[Kết quả] " & tag & " Trúng Nổ Hũ, nhận " & payout.ToString() & " điểm!")
                 ElseIf won Then
-                    AppendChat("[Ket qua] " & tag & " thang " & payout.ToString() & " diem (cuoc " &
+                    AppendChat("[Kết quả] " & tag & " thắng " & payout.ToString() & " điểm (cược " &
                                animalName & " x" & amount.ToString() & ").")
                 Else
-                    AppendChat("[Ket qua] " & tag & " thua " & Math.Abs(payout).ToString() & " diem.")
+                    AppendChat("[Kết quả] " & tag & " thua " & Math.Abs(payout).ToString() & " điểm.")
                 End If
             Next en
         End If
 
         If isHost Then
-            btnHostAction.Text = "Van moi"
+            btnHostAction.Text = "Ván mới"
             btnHostAction.Enabled = True
         End If
         RefreshPlayerCards()
@@ -729,7 +751,7 @@ Public Class Form1
             btnHostAction.Enabled = False
         End If
         btnLockBet.Enabled = False
-        lblRoundInfo.Text = "Dang quay..."
+        lblRoundInfo.Text = "Đang quay..."
         lblCountdown.Text = ""
 
         BuildSpinSequence(targetIndex)
@@ -843,7 +865,7 @@ Public Class Form1
         lblRoundInfo.Location = New Point(20, boardTopY + BOARD_H + 10) : lblRoundInfo.AutoSize = True
         lblRoundInfo.ForeColor = Color.White
         lblRoundInfo.Font = New Font("Segoe UI", 10.0!, FontStyle.Bold)
-        lblRoundInfo.Text = "Cho Host bat dau van moi..."
+        lblRoundInfo.Text = "Chờ Host bắt đầu ván mới..."
         pnlGame.Controls.Add(lblRoundInfo)
 
         lblCountdown = New Label()
@@ -853,7 +875,7 @@ Public Class Form1
         pnlGame.Controls.Add(lblCountdown)
 
         Dim lblBetCap As New Label()
-        lblBetCap.Text = "Diem cuoc (" & VongQuayRongGame.MIN_BET.ToString() & "-" & VongQuayRongGame.MAX_BET.ToString() & "):"
+        lblBetCap.Text = "Điểm cược (" & VongQuayRongGame.MIN_BET.ToString() & "-" & VongQuayRongGame.MAX_BET.ToString() & "):"
         lblBetCap.AutoSize = True
         lblBetCap.ForeColor = Color.White
         lblBetCap.Font = New Font("Segoe UI", 9.5!, FontStyle.Bold)
@@ -876,7 +898,7 @@ Public Class Form1
         pnlGame.Controls.Add(nudBet)
 
         btnLockBet = New Button()
-        btnLockBet.Text = "Khoa cuoc"
+        btnLockBet.Text = "Khoá cược"
         btnLockBet.Location = New Point(270, boardTopY + BOARD_H + 64) : btnLockBet.Size = New Size(120, 30)
         btnLockBet.Font = New Font("Segoe UI", 9.5!, FontStyle.Bold)
         btnLockBet.FlatStyle = FlatStyle.Flat
@@ -888,7 +910,7 @@ Public Class Form1
         pnlGame.Controls.Add(btnLockBet)
 
         btnHostAction = New Button()
-        btnHostAction.Text = "Bat dau van moi"
+        btnHostAction.Text = "Bắt đầu ván mới"
         btnHostAction.Location = New Point(405, boardTopY + BOARD_H + 64) : btnHostAction.Size = New Size(160, 30)
         btnHostAction.Font = New Font("Segoe UI", 9.5!, FontStyle.Bold)
         btnHostAction.FlatStyle = FlatStyle.Flat
@@ -901,7 +923,7 @@ Public Class Form1
 
         ' Khung nhat ky: cac con vat (hoac No Hu) da ra trong nhung van gan day, kem icon nho.
         Dim lblHistoryTitle As New Label()
-        lblHistoryTitle.Text = "Nhat ky ket qua (gan day nhat o ben trai):"
+        lblHistoryTitle.Text = "Nhật ký kết quả (gần đây nhất ô bên trái):"
         lblHistoryTitle.AutoSize = True
         lblHistoryTitle.ForeColor = Color.White
         lblHistoryTitle.Font = New Font("Segoe UI", 9.0!, FontStyle.Bold)
@@ -928,7 +950,7 @@ Public Class Form1
 
         If isHost Then
             Dim lblTopUpHint As New Label()
-            lblTopUpHint.Text = "Meo: bam CHUOT PHAI vao the 1 nguoi choi de nap diem cho ho (tru vao diem cua Host)."
+            lblTopUpHint.Text = "Mẹo: bấm CHUỘT PHẢI vào thẻ 1 người chơi để nạp điểm cho họ (trừ vào điểm của Host)."
             lblTopUpHint.AutoSize = True
             lblTopUpHint.ForeColor = Color.LightGray
             lblTopUpHint.Font = New Font("Segoe UI", 7.5!, FontStyle.Italic)
@@ -1018,11 +1040,11 @@ Public Class Form1
             Using ring As New Pen(Color.FromArgb(255, 210, 60), 2)
                 g.DrawEllipse(ring, iconC.X - iconR, iconC.Y - iconR, iconR * 2, iconR * 2)
             End Using
-            DrawCenteredString(g, "HU", iconC, New Font("Segoe UI", 7.5!, FontStyle.Bold), Color.Gold)
+            DrawCenteredString(g, "HŨ", iconC, New Font("Segoe UI", 7.5!, FontStyle.Bold), Color.Gold)
         End If
 
         Dim textX As Single = iconC.X + iconR + 10
-        Dim jackpotText As String = "Quy Jackpot: " & currentJackpotPool.ToString() & " diem"
+        Dim jackpotText As String = "Quỹ Jackpot: " & currentJackpotPool.ToString() & " điểm"
         Dim jackpotFont As New Font("Segoe UI", 10.0!, FontStyle.Bold)
         Using textBrush As New SolidBrush(Color.Gold)
             g.DrawString(jackpotText, jackpotFont, textBrush, textX, pnlJackpotBanner.Height / 2.0F - 9)
@@ -1034,7 +1056,7 @@ Public Class Form1
     ''' (title, status...) de bam chuot phai o dau trong the cung mo duoc menu.</summary>
     Private Sub AttachTopUpMenu(card As Panel, player As Integer)
         Dim cms As New ContextMenuStrip()
-        Dim item As New ToolStripMenuItem("Nap diem cho nguoi choi nay...")
+        Dim item As New ToolStripMenuItem("Nạp điểm cho người chơi này...")
         AddHandler item.Click, Sub(s As Object, e As EventArgs) TopUpPlayerScore(player)
         cms.Items.Add(item)
         card.ContextMenuStrip = cms
@@ -1051,28 +1073,28 @@ Public Class Form1
         If seat = 0 Then Return ' khong nap cho chinh Host
 
         If Not playerConnected(seat) Then
-            MessageBox.Show("Player " & (seat + 1).ToString() & " hien chua co ai, khong the nap diem.")
+            MessageBox.Show("Player " & (seat + 1).ToString() & " hiện chưa có ai, không thể nạp điểm.")
             Return
         End If
 
-        Dim promptMsg As String = "Nhap so diem muon nap cho Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")." & vbCrLf & "So diem nay se duoc TRU truc tiep tu diem cua ban (Host)."
-        Dim raw As String = InputBox(promptMsg, "Nap diem cho nguoi choi", "50")
+        Dim promptMsg As String = "Nhập số điểm muốn nạp cho Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")." & vbCrLf & "Số điểm này sẽ được TRỪ trực tiếp từ điểm của bạn (Host)."
+        Dim raw As String = InputBox(promptMsg, "Nạp điểm cho người chơi", "50")
         If raw Is Nothing OrElse raw.Trim() = "" Then Return ' nguoi dung bam Cancel hoac de trong
 
         Dim amount As Long
         If Not Long.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, amount) Then
-            MessageBox.Show("So diem khong hop le.")
+            MessageBox.Show("Số điểm không hợp lệ.")
             Return
         End If
         If amount <= 0 Then
-            MessageBox.Show("So diem phai lon hon 0.")
+            MessageBox.Show("Số điểm phải lớn hơn 0.")
             Return
         End If
 
         Dim hostScore As Long = 0
         If scoresBySeat.ContainsKey(0) Then hostScore = scoresBySeat(0)
         If amount > hostScore Then
-            MessageBox.Show("Ban khong du diem de nap (ban dang co " & hostScore.ToString() & " diem).")
+            MessageBox.Show("Bạn không đủ điểm để nạp (bạn đang có " & hostScore.ToString() & " điểm).")
             Return
         End If
 
@@ -1081,9 +1103,9 @@ Public Class Form1
         If scoresBySeat.ContainsKey(seat) Then targetOld = scoresBySeat(seat)
         scoresBySeat(seat) = targetOld + amount
 
-        Dim sysMsg As String = "Host da nap " & amount.ToString() & " diem cho Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")."
-        AppendChat("He thong: " & sysMsg)
-        hub.Broadcast("CHAT:He thong:" & sysMsg)
+        Dim sysMsg As String = "Host đã nạp " & amount.ToString() & " điểm cho Player " & (seat + 1).ToString() & " (" & playerNames(seat) & ")."
+        AppendChat("Hệ thống: " & sysMsg)
+        hub.Broadcast("CHAT:Hệ thống:" & sysMsg)
 
         BroadcastScores()
         RefreshPlayerCards()
@@ -1095,22 +1117,22 @@ Public Class Form1
             If pnlPlayers(p) Is Nothing Then Continue For
             Dim titleLbl As Label = CType(pnlPlayers(p).Controls("title"), Label)
             Dim suffix As String = ""
-            If p = localSeat Then suffix = " (Ban)"
+            If p = localSeat Then suffix = " (Bạn)"
             titleLbl.Text = "Player " & (p + 1).ToString() & " - " & playerNames(p) & suffix
 
             If p = 0 OrElse playerConnected(p) Then
-                lblCardStatus(p).Text = "Diem: " & scoresBySeat(p).ToString()
+                lblCardStatus(p).Text = "Điểm: " & scoresBySeat(p).ToString()
             Else
-                lblCardStatus(p).Text = "(trong)"
+                lblCardStatus(p).Text = "(trống)"
             End If
 
             If lockedAnimalBySeat(p) >= 0 Then
                 If lockedAnimalBySeat(p) = VongQuayRongGame.JACKPOT_INDEX Then
-                    lblCardStats(p).Text = "DA KHOA: NO HU  (" & lockedAmountBySeat(p).ToString() & " diem)"
+                    lblCardStats(p).Text = "ĐÃ KHOÁ: NỔ HŨ  (" & lockedAmountBySeat(p).ToString() & " điểm)"
                 Else
                     Dim a As VongQuayRongGame.AnimalInfo = VongQuayRongGame.Animals(lockedAnimalBySeat(p))
-                    lblCardStats(p).Text = "DA KHOA: " & a.Name & " x" & a.Multiplier.ToString() &
-                                            "  (" & lockedAmountBySeat(p).ToString() & " diem)"
+                    lblCardStats(p).Text = "ĐÃ KHOÁ: " & a.Name & " x" & a.Multiplier.ToString() &
+                                            "  (" & lockedAmountBySeat(p).ToString() & " điểm)"
                 End If
                 lblCardStats(p).Visible = True
             Else
@@ -1120,11 +1142,11 @@ Public Class Form1
 
             If lastRoundHasResult(p) Then
                 If lastRoundWonBySeat(p) Then
-                    lblCardResult(p).Text = "Vua roi: THANG +" & lastRoundPayoutBySeat(p).ToString() & " diem"
+                    lblCardResult(p).Text = "Vừa rồi: Thắng +" & lastRoundPayoutBySeat(p).ToString() & " điểm"
                     lblCardResult(p).ForeColor = Color.FromArgb(30, 140, 40)
                     pnlPlayers(p).BackColor = Color.FromArgb(224, 250, 224)
                 Else
-                    lblCardResult(p).Text = "Vua roi: THUA " & Math.Abs(lastRoundPayoutBySeat(p)).ToString() & " diem"
+                    lblCardResult(p).Text = "Vừa rồi : Thua " & Math.Abs(lastRoundPayoutBySeat(p)).ToString() & " điểm"
                     lblCardResult(p).ForeColor = Color.FromArgb(190, 40, 40)
                     pnlPlayers(p).BackColor = Color.FromArgb(255, 226, 226)
                 End If
@@ -1165,7 +1187,7 @@ Public Class Form1
         g.SmoothingMode = SmoothingMode.AntiAlias
         If spinHistory.Count = 0 Then
             Using dim_ As New SolidBrush(Color.DimGray)
-                g.DrawString("Chua co ket qua nao.", New Font("Segoe UI", 9.0!, FontStyle.Italic), dim_, 10, pnlHistory.ClientSize.Height / 2.0F - 8)
+                g.DrawString("Chưa có kết quả nào.", New Font("Segoe UI", 9.0!, FontStyle.Italic), dim_, 10, pnlHistory.ClientSize.Height / 2.0F - 8)
             End Using
             Return
         End If
