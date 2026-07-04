@@ -121,12 +121,12 @@ Public Class Form1
     Private btnSend As Button
 
     Public Sub New()
-        Me.Text = "Vong Quay Rong"
+        Me.Text = "Vòng Quay Rồng"
         Me.ClientSize = New Size(940, 700)
         Me.StartPosition = FormStartPosition.CenterScreen
         Dim i As Integer
         For i = 0 To 3
-            playerNames(i) = "Nguoi choi " & (i + 1).ToString()
+            playerNames(i) = "Người chơi " & (i + 1).ToString()
             playerConnected(i) = False
             scoresBySeat(i) = VongQuayRongGame.STARTING_SCORE
             lockedAnimalBySeat(i) = -1
@@ -217,7 +217,7 @@ Public Class Form1
         lblName.Location = New Point(40, 100)
         pnlConnect.Controls.Add(lblName)
         txtName = New TextBox() : txtName.Location = New Point(40, 122) : txtName.Size = New Size(220, 24)
-        txtName.Text = "Nguoi choi"
+        txtName.Text = "Người chơi"
         pnlConnect.Controls.Add(txtName)
 
         Dim lblPort As New Label() : lblPort.Text = "Cổng (Port):" : lblPort.AutoSize = True
@@ -255,7 +255,7 @@ Public Class Form1
     Private Sub BtnHost_Click(sender As Object, e As EventArgs)
         Dim port As Integer
         If Not Integer.TryParse(txtPort.Text.Trim(), port) Then
-            MessageBox.Show("Port khôn hợp lệ.") : Return
+            MessageBox.Show("Port không hợp lệ.") : Return
         End If
         isHost = True
         localSeat = 0
@@ -275,7 +275,7 @@ Public Class Form1
     Private Sub BtnJoin_Click(sender As Object, e As EventArgs)
         Dim port As Integer
         If Not Integer.TryParse(txtPort.Text.Trim(), port) Then
-            MessageBox.Show("Port không hợp  lệ.") : Return
+            MessageBox.Show("Port không hợp lệ.") : Return
         End If
         isHost = False
         playerNames(0) = SafeName(txtName.Text) ' se duoc ghi de dung seat sau khi WELCOME
@@ -304,7 +304,7 @@ Public Class Form1
     End Sub
 
     Private Sub Peer_Disconnected()
-        AppendChat("[He thong] Mat ket noi toi Host.")
+        AppendChat("[Hệ thống] Mất kết nối tới Host.")
     End Sub
 
     Private Sub Peer_LineReceived(line As String)
@@ -326,7 +326,7 @@ Public Class Form1
         End If
         SyncStateToLateJoiner(seatIndex)
         RefreshPlayerCards()
-        AppendChat("[He thong] Player " & (seatIndex + 1).ToString() & " da vao phong.")
+        AppendChat("[Hệ thống] Player " & (seatIndex + 1).ToString() & " đã vào phòng.")
     End Sub
 
     ''' <summary>Neu co nguoi vao phong khi van dau da bat dau roi (Betting/Spinning/ShowingResult),
@@ -356,7 +356,7 @@ Public Class Form1
         BroadcastNames()
         BroadcastConnected()
         RefreshPlayerCards()
-        AppendChat("[He thong] Player " & (seatIndex + 1).ToString() & " đã rời phòng.")
+        AppendChat("[Hệ thống] Player " & (seatIndex + 1).ToString() & " đã rời phòng.")
     End Sub
 
     Private Sub Hub_LineReceived(seatIndex As Integer, line As String)
@@ -544,28 +544,30 @@ Public Class Form1
         Next i
         secondsLeft = secs
         lblRoundInfo.Text = "Ván " & roundNo.ToString() & " -  hãy chọn 1 con vật và khoá cược!"
-        lblCountdown.Text = "Con: " & secondsLeft.ToString() & "s"
+        lblCountdown.Text = "Còn: " & secondsLeft.ToString() & "s"
         btnLockBet.Enabled = True
         nudBet.Enabled = True
         If isHost Then
             btnHostAction.Text = "Quay ngay"
             btnHostAction.Enabled = True
-            If countdownTimer Is Nothing Then
-                countdownTimer = New Timer()
-                countdownTimer.Interval = 1000
-                AddHandler countdownTimer.Tick, AddressOf CountdownTimer_Tick
-            End If
-            countdownTimer.Start()
         Else
             btnHostAction.Visible = False
         End If
+        ' Dem nguoc chay tren CA Host lan Client, de thanh dem giay khong bi dung im
+        ' ben man hinh Client cho toi khi Host quay xong.
+        If countdownTimer Is Nothing Then
+            countdownTimer = New Timer()
+            countdownTimer.Interval = 1000
+            AddHandler countdownTimer.Tick, AddressOf CountdownTimer_Tick
+        End If
+        countdownTimer.Start()
         boardPanel.Invalidate()
         RefreshPlayerCards()
     End Sub
 
     Private Sub CountdownTimer_Tick(sender As Object, e As EventArgs)
         secondsLeft -= 1
-        lblCountdown.Text = "Con: " & Math.Max(0, secondsLeft).ToString() & "s"
+        lblCountdown.Text = "Còn: " & Math.Max(0, secondsLeft).ToString() & "s"
         If secondsLeft <= 0 Then
             countdownTimer.Stop()
             DoSpinNow()
@@ -650,7 +652,7 @@ Public Class Form1
             btnLockBet.Enabled = True
             nudBet.Enabled = True
         End If
-        AppendChat("[He thong] Cược vừa rồi không hợp lệ, hãy đặt cược lại.")
+        AppendChat("[Hệ thống] Cược vừa rồi không hợp lệ, hãy đặt cược lại.")
     End Sub
 
     Private Sub BtnLockBet_Click(sender As Object, e As EventArgs)
@@ -688,7 +690,7 @@ Public Class Form1
         AddHistoryEntry(resultIndex)
         If resultIndex = VongQuayRongGame.JACKPOT_INDEX Then
             lblRoundInfo.Text = "Kết quả: Nổ Hũ!!! (ô đặc biệt)"
-            AppendChat("[He thong] Vô hũ!!! Vòng quay đã dừng ở ô Nổ Hũ.")
+            AppendChat("[Hệ thống] Vô hũ!!! Vòng quay đã dừng ở ô Nổ Hũ.")
             StartJackpotCelebration()
         Else
             lblRoundInfo.Text = "Kết quả: " & VongQuayRongGame.Animals(resultIndex).Name &
@@ -711,7 +713,7 @@ Public Class Form1
 
                 Dim animalName As String
                 If animal = VongQuayRongGame.JACKPOT_INDEX Then
-                    animalName = "No Hu"
+                    animalName = "Nổ Hũ"
                 Else
                     animalName = VongQuayRongGame.Animals(animal).Name
                 End If
@@ -1235,9 +1237,9 @@ Public Class Form1
                     Using ring As New Pen(Color.FromArgb(255, 210, 60), 2)
                         g.DrawEllipse(ring, c.X - r, c.Y - r, r * 2, r * 2)
                     End Using
-                    DrawCenteredString(g, "HU", c, New Font("Segoe UI", 7.0!, FontStyle.Bold), Color.Gold)
+                    DrawCenteredString(g, "HŨ", c, New Font("Segoe UI", 7.0!, FontStyle.Bold), Color.Gold)
                 End If
-                DrawCenteredString(g, "No Hu", New PointF(c.X, c.Y + r + 9), New Font("Segoe UI", 6.5!, FontStyle.Bold), Color.Yellow)
+                DrawCenteredString(g, "Nổ Hũ", New PointF(c.X, c.Y + r + 9), New Font("Segoe UI", 6.5!, FontStyle.Bold), Color.Yellow)
             Else
                 Dim a As VongQuayRongGame.AnimalInfo = VongQuayRongGame.Animals(idx)
                 If animalImages(idx) IsNot Nothing Then
@@ -1320,7 +1322,7 @@ Public Class Form1
             Using dragonPen As New Pen(Color.FromArgb(255, 220, 130), 2)
                 g.DrawEllipse(dragonPen, centerPt.X - dr, centerPt.Y - dr, dr * 2, dr * 2)
             End Using
-            DrawCenteredString(g, "RONG", centerPt, New Font("Segoe UI", 8.0!, FontStyle.Bold), Color.White)
+            DrawCenteredString(g, "RỒNG", centerPt, New Font("Segoe UI", 8.0!, FontStyle.Bold), Color.White)
         End If
 
         ' 12 con vat
@@ -1398,7 +1400,7 @@ Public Class Form1
             Using jBorderPen As New Pen(jRingColor, jRingWidth)
                 g.DrawEllipse(jBorderPen, jc.X - jr, jc.Y - jr, jr * 2, jr * 2)
             End Using
-            DrawCenteredString(g, "HU", New PointF(jc.X, jc.Y - 4), New Font("Segoe UI", 7.5!, FontStyle.Bold), Color.Gold)
+            DrawCenteredString(g, "HŨ", New PointF(jc.X, jc.Y - 4), New Font("Segoe UI", 7.5!, FontStyle.Bold), Color.Gold)
         End If
         DrawCenteredString(g, currentJackpotPool.ToString(), New PointF(jc.X, jc.Y + jr + 9), New Font("Segoe UI", 7.0!, FontStyle.Bold), Color.Yellow)
 
@@ -1492,15 +1494,15 @@ Public Class Form1
     Private Sub ShowRoundHint()
         Dim msg As String
         If state = RoundState.Idle AndAlso isHost Then
-            msg = ">> Ban can bam nut ""Bat dau van moi"" truoc khi chon con vat!"
+            msg = ">> Bạn cần bấm nút ""Bắt đầu ván mới"" trước khi chọn con vật!"
         ElseIf state = RoundState.Idle Then
-            msg = ">> Dang cho Host bam ""Bat dau van moi""..."
+            msg = ">> Đang chờ Host bấm ""Bắt đầu ván mới""..."
         ElseIf state = RoundState.Spinning Then
-            msg = ">> Dang quay, vui long doi ket qua..."
+            msg = ">> Đang quay, vui lòng đợi kết quả..."
         ElseIf hasLockedThisRound Then
-            msg = ">> Ban da khoa cuoc van nay roi, doi ket qua nhe."
+            msg = ">> Bạn đã khoá cược ván này rồi, đợi kết quả nhé."
         Else
-            msg = ">> Chua the chon luc nay."
+            msg = ">> Chưa thể chọn lúc này."
         End If
 
         lblRoundInfo.Text = msg
@@ -1521,11 +1523,11 @@ Public Class Form1
         lblRoundInfo.ForeColor = Color.White
         Select Case state
             Case RoundState.Idle
-                lblRoundInfo.Text = "Cho Host bat dau van moi..."
+                lblRoundInfo.Text = "Chờ Host bắt đầu ván mới..."
             Case RoundState.Betting
-                lblRoundInfo.Text = "Van " & game.CurrentRoundNo.ToString() & " - hay chon 1 con vat va khoa cuoc!"
+                lblRoundInfo.Text = "Ván " & game.CurrentRoundNo.ToString() & " - hãy chọn 1 con vật và khoá cược!"
             Case RoundState.Spinning
-                lblRoundInfo.Text = "Dang quay..."
+                lblRoundInfo.Text = "Đang quay..."
         End Select
     End Sub
 
@@ -1582,7 +1584,7 @@ Public Class Form1
         pnlChat.Controls.Add(txtChatInput)
 
         btnSend = New Button()
-        btnSend.Text = "Gui"
+        btnSend.Text = "Gửi"
         btnSend.Location = New Point(w - 50, h - 27)
         btnSend.Size = New Size(50, 26)
         AddHandler btnSend.Click, AddressOf BtnSend_Click
